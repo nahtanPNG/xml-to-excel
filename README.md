@@ -50,7 +50,7 @@ pip install -r requirements.txt
 3. **Run the script**
 
 ```bash
-python main.py
+python main.py <your/xml/files/directory>
 ```
 
 4. **Output:**
