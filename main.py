@@ -22,11 +22,16 @@ with pd.ExcelWriter(f'{folder_path}/output.xlsx', 'xlsxwriter') as writer:
             root = tree.getroot()
             data = []
 
+            # Get the date
+            dhEmi = root.find('.//nfe:dhEmi', namespaces)
+            date = dhEmi.text if dhEmi is not None else "Unknown Date"
+
             # Get product information
-            for det in root.findall('.//nfe:det', namespaces):
+            for i, det in enumerate(root.findall('.//nfe:det', namespaces)):
                 prod = det.find('nfe:prod', namespaces)
                 if prod is not None:
                     row = {
+                        'Date': date if i == 0 else '',  # Apenas na primeira linha
                         'Product': prod.find('nfe:xProd', namespaces).text,
                         'Quantity': prod.find('nfe:qCom', namespaces).text,
                         'Unit Value': prod.find('nfe:vUnCom', namespaces).text,
