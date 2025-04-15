@@ -33,6 +33,13 @@ def main():
             nNF = root.find('.//nfe:nNF', namespaces).text
             serie = root.find('.//nfe:serie', namespaces).text
 
+            tpNF = root.find('.//nfe:tpNF', namespaces).text
+
+            if tpNF == '0':
+                tpNF = "Entrada"
+            elif tpNF == '1':
+                tpNF = "Saida"
+
             # Get the finalidade e natureza da operação
             finNFe = root.find('.//nfe:finNFe', namespaces)
             if finNFe.text == "1":
@@ -92,7 +99,9 @@ def main():
             row = {
                 'Número': nNF,
                 'Serie': serie,
+                'Tipo': tpNF,
                 'Finalidade': finNFe,
+                'Natureza da Operação': natOp,
                 'Dt_Emissão': dhEmi,
                 'CPF_CNPJ_Emit': emit_CNPJ_or_CPF,
                 'Rz_Emit': emit_xNome,
