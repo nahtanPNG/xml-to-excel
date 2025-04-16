@@ -1,131 +1,97 @@
-# TODO:
-# Ler todas as notas fiscais de uma pasta
-# Identificar notas de entrada/devolução e saída -> (1 ou 2 - entrada) (5 ou 6 - saida)
-# Retornar o valor da nota de saida - valores das notas de devolução
-
 import os
 import sys
 import xml.etree.ElementTree as ET
 
 import pandas as pd
 
-namespaces = {
-    'nfe': 'http://www.portalfiscal.inf.br/nfe'
+NAMESPACES = {'nfe': 'http://www.portalfiscal.inf.br/nfe'}
+
+TYPE_MAP = {'0': 'Entrada', '1': 'Saída'}
+
+FINALITY_MAP = {
+    '1': 'Normal',
+    '2': 'Complementar',
+    '3': 'Ajuste',
+    '4': 'Devolução'
 }
 
 
-def main():
-    folder_path = sys.argv[1]
+def parse_text(element, path):
+    found = element.find(path, NAMESPACES)
+    return found.text if found is not None else None
+
+
+def extract_cnpj_or_cpf(parent):
+    cpf = parse_text(parent, 'nfe:CPF')
+    cnpj = parse_text(parent, 'nfe:CNPJ')
+    return cpf or cnpj
+
+
+def process_xml_file(file_path):
+    tree = ET.parse(file_path)
+    root = tree.getroot()
+
+    return {
+        'Número': parse_text(root, './/nfe:nNF'),
+        'Serie': parse_text(root, './/nfe:serie'),
+        'Tipo': TYPE_MAP.get(parse_text(root, './/nfe:tpNF'), 'Desconhecido'),
+        'Finalidade': FINALITY_MAP.get(parse_text(root, './/nfe:finNFe'), 'Desconhecida'),
+        'Natureza da Operação': parse_text(root, './/nfe:natOp'),
+        'Dt_Emissão': parse_text(root, './/nfe:dhEmi'),
+        'CPF_CNPJ_Emit': extract_cnpj_or_cpf(root.find('.//nfe:emit', NAMESPACES)),
+        'Rz_Emit': parse_text(root, './/nfe:emit/nfe:xNome'),
+        'IE_Emit': parse_text(root, './/nfe:emit/nfe:IE'),
+        'CPF_CNPJ_Dest': extract_cnpj_or_cpf(root.find('.//nfe:dest', NAMESPACES)),
+        'Rz_Dest': parse_text(root, './/nfe:dest/nfe:xNome'),
+        'IE_Dest': parse_text(root, './/nfe:dest/nfe:indIEDest'),
+        'UF_Dest': parse_text(root, './/nfe:dest/nfe:enderDest/nfe:UF'),
+        'Valor': float(parse_text(root, './/nfe:vNF') or 0),
+        'Chave': parse_text(root, './/nfe:chNFe'),
+        'Status': parse_text(root, './/nfe:xMotivo'),
+    }
+
+
+def process_folder(folder_path):
     all_data = []
 
     for filename in os.listdir(folder_path):
         if filename.endswith('.xml'):
             file_path = os.path.join(folder_path, filename)
-            print("\n")
-            print(f'Processing file: {file_path}')
+            print(f'Processing: {file_path}')
+            try:
+                row = process_xml_file(file_path)
+                all_data.append(row)
+            except Exception as e:
+                print(f'Error processing {filename}: {e}')
 
-            # Parsing the file
-            tree = ET.parse(f'{folder_path}/{filename}')
-            root = tree.getroot()
-            data = []
+    return all_data
 
-            # Get the number and serie
-            nNF = root.find('.//nfe:nNF', namespaces).text
-            serie = root.find('.//nfe:serie', namespaces).text
 
-            tpNF = root.find('.//nfe:tpNF', namespaces).text
+def save_to_excel(data, output_path):
+    df = pd.DataFrame(data)
 
-            if tpNF == '0':
-                tpNF = "Entrada"
-            elif tpNF == '1':
-                tpNF = "Saida"
+    with pd.ExcelWriter(output_path, engine='xlsxwriter') as writer:
+        df.to_excel(writer, sheet_name='Notas Fiscais', index=False)
 
-            # Get the finalidade e natureza da operação
-            finNFe = root.find('.//nfe:finNFe', namespaces)
-            if finNFe.text == "1":
-                finNFe = "Normal"
-            elif finNFe.text == "2":
-                finNFe = "Complementar"
-            elif finNFe.text == "3":
-                finNFe = "Ajuste"
-            else:
-                finNFe = "Devolução"
+        summary = df.groupby('Tipo')['Valor'].sum().reset_index()
+        summary.to_excel(writer, sheet_name='Resumo', index=False)
 
-            natOp = root.find('.//nfe:natOp', namespaces).text
 
-            # Get the date
-            dhEmi = root.find('.//nfe:dhEmi', namespaces).text
+def main():
+    if len(sys.argv) < 2:
+        print("Uso: python billing_report.py <caminho_da_pasta>")
+        return
 
-            # Get the emits
-            emit = root.find('.//nfe:emit', namespaces)
-            cpf = emit.find('nfe:CPF', namespaces)
-            cnpj = emit.find('nfe:CNPJ', namespaces)
+    folder_path = sys.argv[1]
+    data = process_folder(folder_path)
 
-            if cpf is not None:
-                emit_CNPJ_or_CPF = cpf.text
-            elif cnpj is not None:
-                emit_CNPJ_or_CPF = cnpj.text
-            else:
-                emit_CNPJ_or_CPF = None
+    if data:
+        output_file = os.path.join(folder_path, 'notas_fiscais.xlsx')
+        save_to_excel(data, output_file)
+        print(f'\nArquivo salvo em: {output_file}')
+    else:
+        print("Nenhum dado encontrado.")
 
-            emit_xNome = root.find('.//nfe:emit/nfe:xNome', namespaces).text
-            emit_IE = root.find('.//nfe:emit/nfe:IE', namespaces).text
-
-            # Get the dest
-            dest = root.find('.//nfe:dest', namespaces)
-            cpf = dest.find('nfe:CPF', namespaces)
-            cnpj = dest.find('nfe:CNPJ', namespaces)
-
-            if cpf is not None:
-                dest_CNPJ_or_CPF = cpf.text
-            elif cnpj is not None:
-                dest_CNPJ_or_CPF = cnpj.text
-            else:
-                dest_CNPJ_or_CPF = None
-
-            dest_xNome = root.find('.//nfe:dest/nfe:xNome', namespaces).text
-            dest_IE = root.find('.//nfe:dest/nfe:indIEDest', namespaces).text
-            dest_UF = root.find('.//nfe:dest/nfe:enderDest/nfe:UF', namespaces).text
-
-            # Get values
-            vNF = root.find('.//nfe:vNF', namespaces).text
-
-            # Get key
-            chNFe = root.find('.//nfe:chNFe', namespaces).text
-
-            # Status
-            xMotivo = root.find('.//nfe:xMotivo', namespaces).text
-
-            row = {
-                'Número': nNF,
-                'Serie': serie,
-                'Tipo': tpNF,
-                'Finalidade': finNFe,
-                'Natureza da Operação': natOp,
-                'Dt_Emissão': dhEmi,
-                'CPF_CNPJ_Emit': emit_CNPJ_or_CPF,
-                'Rz_Emit': emit_xNome,
-                'IE_Emit': emit_IE,
-                'CPF_CNPJ_Dest': dest_CNPJ_or_CPF,
-                'Rz_Dest': dest_xNome,
-                'IE_Dest': dest_IE,
-                'UF_Dest': dest_UF,
-                'Valor': vNF,
-                'Chave': chNFe,
-                'Status': xMotivo
-            }
-            all_data.append(row)
-
-    if all_data:
-        with pd.ExcelWriter(f'{folder_path}/teste.xlsx', engine='xlsxwriter') as writer:
-            pd.DataFrame(all_data).to_excel(writer, sheet_name='Notas Fiscais', index=False)
-
-            # Add summary sheet for your business logic
-            df = pd.DataFrame(all_data)
-            summary = df.groupby('Tipo')['Valor'].sum().reset_index()
-            summary.to_excel(writer, sheet_name='Resumo', index=False)
 
 if __name__ == '__main__':
     main()
-
-main()
