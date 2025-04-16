@@ -1,8 +1,16 @@
+import logging
 import os
 import sys
 import xml.etree.ElementTree as ET
 
 import pandas as pd
+
+# Configure the logging
+logging.basicConfig(
+    level=logging.INFO,
+    format='[%(asctime)s] %(levelname)s - %(message)s',
+    datefmt='%H:%M:%S'
+)
 
 NAMESPACES = {'nfe': 'http://www.portalfiscal.inf.br/nfe'}
 
@@ -57,12 +65,12 @@ def process_folder(folder_path):
     for filename in os.listdir(folder_path):
         if filename.endswith('.xml'):
             file_path = os.path.join(folder_path, filename)
-            print(f'Processing: {file_path}')
+            logging.info(f'Processing: {file_path}')
             try:
                 row = process_xml_file(file_path)
                 all_data.append(row)
             except Exception as e:
-                print(f'Error processing {filename}: {e}')
+                logging.error(f'Error processing {filename}: {e}')
 
     return all_data
 
@@ -79,7 +87,7 @@ def save_to_excel(data, output_path):
 
 def main():
     if len(sys.argv) < 2:
-        print("Uso: python billing_report.py <caminho_da_pasta>")
+        logging.warning("Uso: python billing_report.py <caminho_da_pasta>")
         return
 
     folder_path = sys.argv[1]
@@ -88,9 +96,9 @@ def main():
     if data:
         output_file = os.path.join(folder_path, 'notas_fiscais.xlsx')
         save_to_excel(data, output_file)
-        print(f'\nArquivo salvo em: {output_file}')
+        logging.info(f'\nArquivo salvo em: {output_file}')
     else:
-        print("Nenhum dado encontrado.")
+        logging.warning("Nenhum dado encontrado.")
 
 
 if __name__ == '__main__':
